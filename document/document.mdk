@@ -1,0 +1,536 @@
+Title         : Welcome
+Author        : You
+Logo          : True
+
+[TITLE]
+
+# 简介
+1-1 传统模板引擎
+传统模板引擎编译生成HTML字符串。
+通常在后台脚本语言中将模板和数据合并成html字符串输出到前端
+或者后台输出数据，前端使用模板引擎组合数据和模板生成界面
+当数据发生变化的时候，最简单的就是模板重新渲染，或者模板引擎局部界面重新渲染。
+当页面包含的数据很多的时候，这种代码操作中包含很多DOM操作，编码复杂不便维护。而且重新渲染导致性能问题
+1-2 vdom
+虚拟dom则将这个过程分为两步
+第一步编译模板生成vdom的渲染函数render
+在需要的渲染的时候调用渲染函数render组成的树状vdom
+在mvvm数据绑定的结构中，将视图部分的渲染组织为vdom的渲染函数。可以优化编码结构与渲染效率
+
+2-1 模板引擎简介
+下面是一个普通的模板引擎语法。支持循环语句(each) 条件语句(if elseif)和文本填充{}。
+;简单的模板语法
+<div>
+  <h1>{title}</h1>
+  <ul>
+    {each users as user i}
+    <li class="user-item">
+      <img src="/avatars/{user.id}" />
+      <span>NO.{i + 1} - {user.name}</span>
+      {if user.isAdmin}
+        I am admin
+      {elseif user.isAuthor}
+        I am author
+      {else}
+        I am nobody
+      {/if}
+    </li>
+    {/each}
+  </ul>
+</div>
+对于上述模板语法，输入下面数据
+
+var data = {
+
+  title: 'Users List',
+  
+  users: [
+  
+    {id: 'user0', name: 'Jerry', isAdmin: true},
+    
+    {id: 'user1', name: 'Lucy', isAuthor: true},
+    
+    {id: 'user2', name: 'Tomy'}
+    
+  ]
+}
+
+模板引擎解析后生成的html字符串如下
+<div>
+  <h1>Users List</h1>
+  <ul>
+    <li class="user-item">
+       <img src="/avatars/user0" />
+       <span>NO.1 - Jerry</span>
+       I am admin
+    </li>
+    <li class="user-item">
+       <img src="/avatars/user1" />
+       <span>NO.2 - Lucy</span>
+       I am author
+    </li>
+    <li class="user-item">
+       <img src="/avatars/user2" />
+       <span>NO.3 - Tomy</span>
+       I am nobody
+    </li>
+  </ul>
+</div>
+将字符串插入文档中即可实现渲染界面
+
+2-2 vdom
+如果上述数据中的data.title发生变化，
+则需要使用dom操作语法重新修改模板结构
+可以参考ReactJs的JSX的做法，
+将模板编译为一个生成vdom的的render函数。
+render函数接受传入的数据生成不同的vdom。
+然后可以根据vdom的算法diff和patch来比较局部渲染
+;vdom简单流程
+;模板编译生成渲染函数render
+
+var render = template(tplString) 
+
+;接受初始化数据,返回初始化vdom结果
+
+var root1 = render(state1) 
+
+;生成真正的dom，插入文档中
+
+var dom = root.render() 
+
+document.body.appendChild(dom)
+
+;接受变化后的数据，生成另外的vdom
+var root2 = render(state2) ;
+
+对比两个vdom
+var patches = diff(root1, root2) ;
+
+渲染对比结果
+patch(dom, patches)
+这样将模板编译与结果渲染分离，可以重复使用编译结果，提高执行效率。
+而将结果渲染分为比较和局部渲染，可以优化代码的组织结构
+总体流程如下
+1 模板编译生成一个render函数，接受数据返回不同的vdom
+
+2 接受数据生成vdom，结合渲染平台生成真正的dom元素，插入文档
+
+3 数据变化后，渲染函数接受数据，生成新的vdom
+
+4 新旧的vdom进行diff，然后局部patch到文档的dom元素中
+
+模板编译生成render函数结构简单如下
+
+function render (state) {
+
+  return el('div', {}, [
+  
+    el('h1', {}, [state.title]),
+    
+    el('ul', {}, state.users.map(function (user, i) {
+    
+       return el('li', {"class": "user-item"}, [
+       
+         el('img', {"src": "/avatars/" + user.id}, []),
+         
+         el('span', {}, ['No.' + (i + 1) + ' - ' + user.name],
+         
+         (user.isAdmin 
+         
+           ? 'I am admin'
+           
+           : uesr.isAuthor 
+           
+             ? 'I am author'
+             
+             : '')
+          ])
+   
+    }))
+  
+  ])
+}
+# vdom-templat的实现思路
+简单的模板引擎可以适合于正则表达式对相应模板字符串进行替换生成
+这里使用编译原理的一部基础知识，实现把一种语言(模板语法)编译为另外一种语言(render的javascript函数)
+
+# 编译原理流程
+
+1 词法分析：将输入的模板分割为词法单元
+
+2 语法分析：接受词法单元，根据文法规则转换为抽象语法树
+
+3 代码生成：遍历AST，生成render函数体代码
+
+4 可以将这个过程分为词法分析(lex),语法分析(parser)，代码生成(codegen)三部分。
+
+# 模板的文法定义
+可以使用文法描述模板结构的组成,作为词法分析与语法分析的基础;
+
+模板整体
+Stat -> Frag Stat | ε
+Frag -> IfStat | EachStat | Node | text;
+
+语句组织
+IfStat -> '{if ...}' Stat ElseIfs Else '{/if}'
+ElseIfs -> ElseIf ElseIfs | ε
+ElseIf -> '{elseif ...}' Stat
+Else -> '{else}' Stat | ε
+
+EachStat -> '{each ...}' Stat '{/each}';
+
+节点组织
+Node -> OpenTag NodeTail
+OpenTag -> '/[\w\-\d]+/' Attrs
+NodeTail -> '>' Stat '/\<[\w\d]+\>/' | '/>';
+
+节点属性
+Attrs -> Attr Attrs | ε 
+Attr -> '/[\w\-\d]/+' Value;
+
+节点值
+Value -> '=' '/"[\s\S]+"/' | ε
+# 词法分析 lexer
+模板文法中的基础词法单元如下
+
+module.exports = {
+
+  TK_TEXT: 1, // 文本节点
+  
+  TK_IF: 2, // {if ...}
+  
+  TK_END_IF: 3, // {/if}
+  
+  TK_ELSE_IF: 4, // {elseif ...}
+  
+  TK_ELSE: 5, // {else}
+  
+  TK_EACH: 6, // {each ...}
+  
+  TK_END_EACH: 7, // {/each}
+  
+  TK_GT: 8, // >
+  
+  TK_SLASH_GT: 9, // />
+  
+  TK_TAG_NAME: 10, // <div|<span|<img|...
+  
+  TK_ATTR_NAME: 11, // 属性名
+  
+  TK_ATTR_EQUAL: 12, // =
+  
+  TK_ATTR_STRING: 13, // "string"
+  
+  TK_CLOSE_TAG: 13, // </div>|</span>|</a>|...
+  
+  TK_EOF: 100 // end of file
+  
+}
+使用js的正则表达式引擎实现词法分析，
+解析输入的模板字符串，生成词法单元流
+;词法单元入口
+
+function Tokenizer (input) {
+  this.input = input
+  this.index = 0
+  this.eof = false
+}
+
+var pp = Tokenizer.prototype;
+
+词法单元解析
+
+pp.nextToken = function () {
+
+  this.eatSpaces()
+  
+  return (
+  
+    this.readCloseTag() ||
+    
+    this.readTagName() ||
+    
+    this.readAttrName() ||
+    
+    this.readAttrEqual() ||
+    
+    this.readAttrString() ||
+    
+    this.readGT() ||
+    
+    this.readSlashGT() ||
+    
+    this.readIF() ||
+    
+    this.readElseIf() ||
+    
+    this.readElse() ||
+    
+    this.readEndIf() ||
+    
+    this.readEach() ||
+    
+    this.readEndEach() ||
+    
+    this.readText() ||
+    
+    this.readEOF() ||
+    
+    this.error()
+  )
+}
+
+其中index标识字符串的位置。
+nextToken()跳过所有空白字符串，
+然后尝试匹配不同类型的token
+匹配失败尝试下一种，成功返回移动index，
+上面的简单模板列子经过词法分析可以解析生成如下
+{ type: 10, label: 'div' }
+{ type: 8, label: '>' }
+{ type: 10, label: 'h1' }
+{ type: 8, label: '>' }
+{ type: 1, label: '{title}' }
+{ type: 13, label: '</h1>' }
+{ type: 10, label: 'ul' }
+{ type: 8, label: '>' }
+{ type: 6, label: '{each users as user i}' }
+{ type: 10, label: 'li' }
+{ type: 11, label: 'class' }
+{ type: 12, label: '=' }
+{ type: 13, label: 'user-item' }
+{ type: 8, label: '>' }
+{ type: 10, label: 'img' }
+{ type: 11, label: 'src' }
+{ type: 12, label: '=' }
+{ type: 13, label: '/avatars/{user.id}' }
+{ type: 9, label: '/>' }
+{ type: 10, label: 'span' }
+{ type: 8, label: '>' }
+{ type: 1, label: 'NO.' }
+{ type: 1, label: '{i + 1} - ' }
+{ type: 1, label: '{user.name}' }
+{ type: 13, label: '</span>' }
+{ type: 2, label: '{if user.isAdmin}' }
+{ type: 1, label: 'I am admin\r\n        ' }
+{ type: 4, label: '{elseif user.isAuthor}' }
+{ type: 1, label: 'I am author\r\n        ' }
+{ type: 5, label: '{else}' }
+{ type: 1, label: 'I am nobody\r\n        ' }
+{ type: 3, label: '{/if}' }
+{ type: 13, label: '</li>' }
+{ type: 7, label: '{/each}' }
+{ type: 13, label: '</ul>' }
+{ type: 13, label: '</div>' }
+{ type: 100, label: '$' }
+
+# 语法解析parser
+将语法结构组织为first集合和follow集如下
+FIRST(Stat) = {TK_IF, TK_EACH, TK_TAG_NAME, TK_TEXT}
+FOLLOW(Stat) = {TK_ELSE_IF, TK_END_IF, TK_ELSE, TK_END_EACH, TK_CLOSE_TAG, TK_EOF}
+
+FIRST(Frag) = {TK_IF, TK_EACH, TK_TAG_NAME, TK_TEXT}
+FIRST(IfStat) = {TK_IF}
+
+FIRST(ElseIfs) = {TK_ELSE_IF}
+FOLLOW(ElseIfs) = {TK_ELSE, TK_ELSE}
+
+FIRST(ElseIf) = {TK_ELSE_IF}
+
+FIRST(Else) = {TK_ELSE}
+FOLLOW(Else) = {TK_END_IF}
+
+FIRST(EachStat) = {TK_EACH}
+FIRST(OpenTag) = {TK_TAG_NAME}
+FIRST(NodeTail) = {TK_GT, TK_SLASH_GT}
+
+FIRST(Attrs) = {TK_ATTR_NAME}
+FOLLOW(Attrs) = {TK_GT, TK_SLASH_GT}
+
+FIRST(Value) = {TK_ATTR_EQUAL}
+FOLLOW(Value) = {TK_ATTR_NAME, TK_GT, TK_SLASH_GT}
+递归下降的语法parser如下
+var Tokenizer = require('./tokenizer')
+var types = require('./tokentypes')
+
+;语法解析入口
+function Parser (input) {
+  this.tokens = new Tokenizer(input)
+  this.parse()
+}
+
+var pp = Parser.prototype
+
+;词法类型判断
+pp.is = function (type) {
+  return (this.tokens.peekToken().type === type)
+}
+
+;语法解析
+pp.parse = function () {
+  this.tokens.index = 0
+  this.parseStat()
+  this.eat(types.TK_EOF)
+}
+
+;Stat解析
+pp.parseStat = function () {
+  if (
+    this.is(types.TK_IF) ||
+    this.is(types.TK_EACH) ||
+    this.is(types.TK_TAG_NAME) ||
+    this.is(types.TK_TEXT)
+  ) {
+    this.parseFrag()
+    this.parseStat()
+  } else {
+    // end
+  }
+}
+
+;Frag解析
+pp.parseFrag = function () {
+  if (this.is(types.TK_IF)) return this.parseIfStat()
+  else if (this.is(types.TK_EACH)) return this.parseEachStat()
+  else if (this.is(types.TK_TAG_NAME)) return this.parseNode()
+  else if (this.is(types.TK_TEXT)) {
+    var token = this.eat(types.TK_TEXT)
+    return token.label
+  } else {
+    this.parseError('parseFrag')
+  }
+}
+
+;等等其他子解析过程
+递归下降分析，构建语法的树状表示结构AST如下
+Stat: {
+    type: 'Stat'
+    members: [IfStat | EachStat | Node | text, ...]
+}
+
+IfStat: {
+    type: 'IfStat'
+    label: <string>,
+    body: Stat
+    elifs: [ElseIf, ...]
+    elsebody: Stat
+}
+
+ElseIf: {
+    type: 'ElseIf'
+    label: <string>,
+    body: Stat
+}
+
+EachStat: {
+    type: 'EachStat'
+    label: <string>,
+    body: Stat
+}
+
+Node: {
+    type: 'Node'
+    name: <string>,
+    attributes: <object>,
+    body: Stat
+}
+可以使用具体嵌套功能的js对象或者数组表示树状结构的语法树
+语法树的构建过程可以在语法分析阶段同时进行，
+最后上面的模板语法获得下面的语法树结构
+
+# 代码生成
+从js字符串构建新的函数可以使用new Function
+var newFunc = new Function('a', 'b', 'return a + b')
+newFunc(1, 2) // => 3
+可以将语法树对应字符串作为第三个参数生成render函数
+只需要对AST进行遍历，维护一个数组来保存生成的render函数的代码
+;代码生成入口
+function CodeGen (ast) {
+  this.lines = []
+  this.walk(ast)
+  this.body = this.lines.join('\n')
+}
+
+var pp = CodeGen.prototype
+
+;AST遍历
+pp.walk = function (node) {
+  if (node.type === 'IfStat') {
+    this.genIfStat(node)
+  } else if (node.type === 'Stat') {
+    this.genStat(node)
+  } else if (node.type === 'EachStat') {
+    ...
+  }
+  ...
+}
+
+;生成不同render
+pp.genIfStat = function (node) {
+  var expr = node.label.replace(/(^\{\s*if\s*)|(\s*\}$)/g, '')
+  this.lines.push('if (' + expr + ') {')
+  if (node.body) {
+    this.walk(node.body)
+  }
+  if (node.elseifs) {
+    var self = this
+    _.each(node.elseifs, function (elseif) {
+      self.walk(elseif)
+    })
+  }
+  if (node.elsebody) {
+    this.lines.push(indent + '} else {')
+    this.walk(node.elsebody)
+  }
+  this.lines.push('}')
+}
+
+pp.genEachStat = function (node) {
+  var expr = node.label.replace(/(^\{\s*each\s*)|(\s*\}$)/g, '')
+  var tokens = expr.split(/\s+/)
+  var list = tokens[0]
+  var item = tokens[2]
+  var key = tokens[3]
+  this.lines.push(
+    'for (var ' + key + ' = 0, len = ' + list + '.length; ' + key + ' < len; ' + key + '++) {'
+  )
+  this.lines.push('var ' + item + ' = ' + list + '[' + key + '];')
+  if (node.body) {
+    this.walk(node.body)
+  }
+  this.lines.push('}')
+}
+// ...
+其中的lines包含相应的代码结果
+然后生成对应的render函数
+var code = new CodeGen(ast)
+var render = new Function('el', 'data', code.body)
+el作为render函数的渲染目标节点，
+data需要的数据,
+code.body为解析后的render函数
+# diff和patch封装
+对于diff和patch，可以将其封装为setData的api。
+每次数据变更,只需要setData就可以更新到DOM元素上
+// vTemplate.compile 编译模版字符串，返回一个函数
+var usersListTpl = vTemplate.compile(tplStr)
+
+// userListTpl 传入初始数据状态，返回一个实例
+var usersList = usersListTpl({
+  title: 'Users List',
+  users: [
+    {id: 'user0', name: 'Jerry', isAdmin: true},
+    {id: 'user1', name: 'Lucy', isAuthor: true},
+    {id: 'user2', name: 'Tomy'}
+  ]
+})
+
+// 返回的实例有 dom 元素和一个 setData 的 API
+document.appendChild(usersList.dom)
+
+// 需要变更数据的时候，setData 一下即可
+usersList.setData({
+  title: 'Users',
+  users: [
+    {id: 'user1', name: 'Lucy', isAuthor: true},
+    {id: 'user2', name: 'Tomy'}
+  ]
+})
